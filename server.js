@@ -4,9 +4,9 @@ const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 const { GoogleGenAI } = require("@google/genai");
 
-// ===============================
+// ==========================================
 // EXPRESS SERVER
-// ===============================
+// ==========================================
 
 const app = express();
 
@@ -16,34 +16,46 @@ app.get("/", (req, res) => {
   res.send("✅ CartoonVerse AI V10 is running");
 });
 
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    bot: "CartoonVerse AI V10",
+    time: new Date().toISOString()
+  });
+});
+
 app.listen(PORT, () => {
   console.log(`🌐 Server running on port ${PORT}`);
 });
 
-// ===============================
+// ==========================================
 // ENVIRONMENT VARIABLES
-// ===============================
+// ==========================================
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
 
 if (!BOT_TOKEN) {
-  console.error("❌ BOT_TOKEN is missing");
+  console.error("❌ BOT_TOKEN is missing in Render Environment Variables");
   process.exit(1);
 }
 
 if (!GEMINI_KEY) {
-  console.error("❌ GEMINI_API_KEY is missing");
+  console.error("❌ GEMINI_API_KEY is missing in Render Environment Variables");
   process.exit(1);
 }
 
-// ===============================
-// GEMINI AI
-// ===============================
+// ==========================================
+// GEMINI
+// ==========================================
 
 const ai = new GoogleGenAI({
   apiKey: GEMINI_KEY
 });
+
+// ==========================================
+// GEMINI AI GENERATOR WITH RETRY
+// ==========================================
 
 async function generateAI(prompt) {
   const maxAttempts = 4;
@@ -63,16 +75,17 @@ async function generateAI(prompt) {
         throw new Error("Gemini returned an empty response.");
       }
 
-      console.log("✅ Gemini response received");
+      console.log(
+        `✅ Gemini response received (${text.length} characters)`
+      );
 
-      return text;
+      return text.trim();
 
     } catch (error) {
-
       const message = error?.message || String(error);
 
       console.error(
-        `❌ Gemini attempt ${attempt}:`,
+        `❌ Gemini attempt ${attempt}/${maxAttempts}:`,
         message
       );
 
@@ -91,21 +104,22 @@ async function generateAI(prompt) {
       const waitTime = Math.pow(2, attempt) * 1000;
 
       console.log(
-        `⏳ Gemini temporarily unavailable. Retrying in ${waitTime / 1000}s...`
+        `⏳ Gemini temporarily unavailable. ` +
+        `Retrying in ${waitTime / 1000}s...`
       );
 
-      await new Promise(resolve =>
-        setTimeout(resolve, waitTime)
-      );
+      await new Promise((resolve) => {
+        setTimeout(resolve, waitTime);
+      });
     }
   }
 
   throw new Error("Gemini generation failed.");
 }
 
-// ===============================
+// ==========================================
 // TELEGRAM BOT
-// ===============================
+// ==========================================
 
 const bot = new TelegramBot(BOT_TOKEN, {
   polling: true
@@ -113,14 +127,54 @@ const bot = new TelegramBot(BOT_TOKEN, {
 
 console.log("🤖 CartoonVerse AI V10 Telegram Bot Started");
 
-// ===============================
+// ==========================================
+// LONG MESSAGE SENDER
+// ==========================================
+// Telegram messages have a length limit.
+// We keep each chunk below the limit.
+
+async function sendLongMessage(chatId, text) {
+  const MAX_LENGTH = 4000;
+
+  if (!text) {
+    return;
+  }
+
+  const cleanText = String(text);
+
+  const chunks = [];
+
+  for (let i = 0; i < cleanText.length; i += MAX_LENGTH) {
+    chunks.push(
+      cleanText.substring(i, i + MAX_LENGTH)
+    );
+  }
+
+  console.log(
+    `📤 Sending ${chunks.length} Telegram message(s)`
+  );
+
+  for (let i = 0; i < chunks.length; i++) {
+    await bot.sendMessage(
+      chatId,
+      chunks[i]
+    );
+
+    // Small delay between chunks
+    if (i < chunks.length - 1) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 300);
+      });
+    }
+  }
+}
+
+// ==========================================
 // /START
-// ===============================
+// ==========================================
 
 bot.onText(/^\/start$/, async (msg) => {
-
   try {
-
     await bot.sendMessage(
       msg.chat.id,
       `🎬 Welcome to CartoonVerse AI V10!
@@ -130,38 +184,31 @@ Your AI Content Studio is ready.
 Commands:
 
 /story football
+Generate a Hindi cartoon story.
+
 /movie lion
+Generate a cartoon movie structure.
+
+/help
+Show all commands.
 
 🚀 More AI modules coming soon.`
     );
 
   } catch (error) {
-
-    console.error("❌ START ERROR:", error.message);
-
+    console.error(
+      "❌ START ERROR:",
+      error?.message || error
+    );
   }
-
 });
-async function sendLongMessage(chatId, text) {
-  const maxLength = 4000;
 
-  for (let i = 0; i < text.length; i += maxLength) {
-    const chunk = text.substring(i, i + maxLength);
-
-    await bot.sendMessage(chatId, chunk);
-
-    // Telegram को थोड़ा gap
-    await new Promise(resolve => setTimeout(resolve, 300));
-  }
-}
-// ===============================
+// ==========================================
 // /HELP
-// ===============================
+// ==========================================
 
 bot.onText(/^\/help$/, async (msg) => {
-
   try {
-
     await bot.sendMessage(
       msg.chat.id,
       `📚 CartoonVerse AI V10
@@ -177,64 +224,101 @@ Show commands.
 /story <topic>
 Generate a Hindi cartoon story.
 
+Example:
+/story football
+
 /movie <topic>
-Generate a cartoon movie structure.`
+Generate a cartoon movie structure.
+
+Example:
+/movie magic pencil`
     );
 
   } catch (error) {
-
-    console.error("❌ HELP ERROR:", error.message);
-
+    console.error(
+      "❌ HELP ERROR:",
+      error?.message || error
+    );
   }
-
 });
 
-// ===============================
+// ==========================================
 // /STORY
-// ===============================
+// ==========================================
 
 bot.onText(/^\/story\s+(.+)$/i, async (msg, match) => {
 
+  const chatId = msg.chat.id;
   const topic = match[1].trim();
 
   try {
 
+    console.log(`📖 Story topic: ${topic}`);
+
     await bot.sendMessage(
-      msg.chat.id,
+      chatId,
       "✍️ Story generate ho rahi hai..."
     );
-
-    console.log(`📖 Story topic: ${topic}`);
 
     const prompt = `
 You are CartoonVerse AI V10 Story Engine.
 
 Create an original Hindi cartoon story for YouTube.
 
-Topic:
+TOPIC:
 ${topic}
 
-Requirements:
+IMPORTANT REQUIREMENTS:
 
-- Simple Hindi
-- Kids-friendly
-- Strong opening hook
-- Interesting main characters
-- Beginning
-- Problem
-- Adventure
-- Climax
-- Happy ending
-- Moral
-- Approximately 3 to 5 minutes
-- Make the story entertaining
-- Use natural Hindi dialogue
+- Write in simple Hindi.
+- Kids-friendly.
+- Original story.
+- Strong opening hook.
+- Interesting characters.
+- Beginning.
+- Problem.
+- Adventure.
+- Climax.
+- Happy ending.
+- Moral at the end.
+- Approximately 3 to 5 minutes.
+- Entertaining and emotional.
+- Use natural Hindi dialogue.
+- Do not explain your instructions.
+- Directly write the finished story.
+
+FORMAT:
+
+TITLE:
+[Story title]
+
+CHARACTERS:
+[List main characters]
+
+HOOK:
+[Strong opening]
+
+STORY:
+[Complete story with narration and dialogue]
+
+CLIMAX:
+[Climax]
+
+ENDING:
+[Happy ending]
+
+MORAL:
+[Moral]
 `;
 
     const story = await generateAI(prompt);
 
-    await bot.sendMessage(
-      msg.chat.id,
+    console.log(
+      `📖 Story generated: ${story.length} characters`
+    );
+
+    await sendLongMessage(
+      chatId,
       `🎬 CARTOONVERSE AI V10
 
 📖 STORY
@@ -244,42 +328,51 @@ ${story}`
 
   } catch (error) {
 
-    console.error("❌ STORY ERROR:", error);
-
-    await bot.sendMessage(
-      msg.chat.id,
-      `❌ Story Error:
-
-${error?.message || String(error)}`
+    console.error(
+      "❌ STORY ERROR:",
+      error?.message || error
     );
 
-  }
+    try {
+      await bot.sendMessage(
+        chatId,
+        `❌ Story Error:
 
+${error?.message || String(error)}`
+      );
+    } catch (sendError) {
+      console.error(
+        "❌ STORY ERROR MESSAGE FAILED:",
+        sendError?.message || sendError
+      );
+    }
+  }
 });
 
-// ===============================
+// ==========================================
 // /MOVIE
-// ===============================
+// ==========================================
 
 bot.onText(/^\/movie\s+(.+)$/i, async (msg, match) => {
 
+  const chatId = msg.chat.id;
   const topic = match[1].trim();
 
   try {
 
+    console.log(`🎥 Movie topic: ${topic}`);
+
     await bot.sendMessage(
-      msg.chat.id,
+      chatId,
       "🎥 Movie structure generate ho raha hai..."
     );
-
-    console.log(`🎥 Movie topic: ${topic}`);
 
     const prompt = `
 You are CartoonVerse AI V10 Movie Engine.
 
 Create an original Hindi kids cartoon movie.
 
-Topic:
+TOPIC:
 ${topic}
 
 Create:
@@ -288,16 +381,8 @@ Create:
 2. Main characters
 3. Character descriptions
 4. Story summary
-5. Scene 1
-6. Scene 2
-7. Scene 3
-8. Scene 4
-9. Scene 5
-10. Scene 6
-11. Scene 7
-12. Scene 8
-13. Scene 9
-14. Scene 10
+
+Then create 10 scenes.
 
 For every scene include:
 
@@ -307,19 +392,40 @@ For every scene include:
 - Image generation prompt
 - Video generation prompt
 
+Scenes:
+
+Scene 1
+Scene 2
+Scene 3
+Scene 4
+Scene 5
+Scene 6
+Scene 7
+Scene 8
+Scene 9
+Scene 10
+
 Also include:
 
 - Climax
-- Ending
+- Happy ending
 - Moral
 - YouTube title
 - YouTube description
+
+Keep everything original and kids-friendly.
+
+Return the finished movie structure directly.
 `;
 
     const movie = await generateAI(prompt);
 
-    await bot.sendMessage(
-      msg.chat.id,
+    console.log(
+      `🎥 Movie generated: ${movie.length} characters`
+    );
+
+    await sendLongMessage(
+      chatId,
       `🎥 CARTOONVERSE AI V10
 
 ${movie}`
@@ -327,28 +433,36 @@ ${movie}`
 
   } catch (error) {
 
-    console.error("❌ MOVIE ERROR:", error);
-
-    await bot.sendMessage(
-      msg.chat.id,
-      `❌ Movie Error:
-
-${error?.message || String(error)}`
+    console.error(
+      "❌ MOVIE ERROR:",
+      error?.message || error
     );
 
-  }
+    try {
+      await bot.sendMessage(
+        chatId,
+        `❌ Movie Error:
 
+${error?.message || String(error)}`
+      );
+    } catch (sendError) {
+      console.error(
+        "❌ MOVIE ERROR MESSAGE FAILED:",
+        sendError?.message || sendError
+      );
+    }
+  }
 });
 
-// ===============================
+// ==========================================
 // TELEGRAM ERRORS
-// ===============================
+// ==========================================
 
 bot.on("polling_error", (error) => {
 
   console.error(
     "❌ Telegram polling error:",
-    error.message
+    error?.message || error
   );
 
 });
@@ -357,19 +471,19 @@ bot.on("error", (error) => {
 
   console.error(
     "❌ Telegram bot error:",
-    error.message
+    error?.message || error
   );
 
 });
 
-// ===============================
-// PROCESS ERRORS
-// ===============================
+// ==========================================
+// NODE.JS ERRORS
+// ==========================================
 
 process.on("unhandledRejection", (error) => {
 
   console.error(
-    "❌ Unhandled rejection:",
+    "❌ UNHANDLED REJECTION:",
     error
   );
 
@@ -378,10 +492,14 @@ process.on("unhandledRejection", (error) => {
 process.on("uncaughtException", (error) => {
 
   console.error(
-    "❌ Uncaught exception:",
+    "❌ UNCAUGHT EXCEPTION:",
     error
   );
 
 });
+
+// ==========================================
+// READY
+// ==========================================
 
 console.log("🚀 CartoonVerse AI V10 Ready");
