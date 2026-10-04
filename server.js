@@ -142,7 +142,18 @@ Commands:
   }
 
 });
+async function sendLongMessage(chatId, text) {
+  const maxLength = 4000;
 
+  for (let i = 0; i < text.length; i += maxLength) {
+    const chunk = text.substring(i, i + maxLength);
+
+    await bot.sendMessage(chatId, chunk);
+
+    // Telegram को थोड़ा gap
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
+}
 // ===============================
 // /HELP
 // ===============================
