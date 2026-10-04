@@ -117,15 +117,14 @@ Requirements:
 
 ${story}`
     );
-  } catch (error) {
-    console.error("Story error:", error);
+ } catch (error) {
+  console.error("❌ STORY ERROR:", error);
 
-    await bot.sendMessage(
-      msg.chat.id,
-      "❌ Story generate nahi ho saki. Logs check karo."
-    );
+  await bot.sendMessage(
+    msg.chat.id,
+    `❌ Story Error:\n\n${error?.message || error}`
+  );
   }
-});
 
 bot.onText(/^\/movie\s+(.+)$/i, async (msg, match) => {
   const topic = match[1].trim();
@@ -162,16 +161,15 @@ Create:
 
 ${movie}`
     );
-  } catch (error) {
-    console.error("Movie error:", error);
 
-    await bot.sendMessage(
-      msg.chat.id,
-      "❌ Movie generate nahi ho saki. Logs check karo."
-    );
+} catch (error) {
+  console.error("❌ MOVIE ERROR:", error);
+
+  await bot.sendMessage(
+    msg.chat.id,
+    `❌ Movie Error:\n\n${error?.message || error}`
+  );
   }
-});
-
 bot.on("polling_error", (error) => {
   console.error("❌ Telegram polling error:", error.message);
 });
