@@ -46,29 +46,61 @@ const ai = new GoogleGenAI({
 });
 
 async function generateAI(prompt) {
-  try {
-    console.log("🤖 Sending request to Gemini...");
+  const maxAttempts = 4;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt
-    });
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      console.log(`🤖 Gemini attempt ${attempt}/${maxAttempts}`);
 
-    const text = response.text;
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt
+      });
 
-    if (!text || text.trim() === "") {
-      throw new Error("Gemini returned an empty response.");
+      const text = response.text;
+
+      if (!text || text.trim() === "") {
+        throw new Error("Gemini returned an empty response.");
+      }
+
+      console.log("✅ Gemini response received");
+
+      return text;
+
+    } catch (error) {
+
+      const message = error?.message || String(error);
+
+      console.error(
+        `❌ Gemini attempt ${attempt}:`,
+        message
+      );
+
+      const isTemporary =
+        message.includes("503") ||
+        message.includes("UNAVAILABLE") ||
+        message.includes("429") ||
+        message.includes("RESOURCE_EXHAUSTED") ||
+        message.includes("500") ||
+        message.includes("INTERNAL");
+
+      if (!isTemporary || attempt === maxAttempts) {
+        throw error;
+      }
+
+      const waitTime = Math.pow(2, attempt) * 1000;
+
+      console.log(
+        `⏳ Gemini temporarily unavailable. Retrying in ${waitTime / 1000}s...`
+      );
+
+      await new Promise(resolve =>
+        setTimeout(resolve, waitTime)
+      );
     }
-
-    console.log("✅ Gemini response received");
-
-    return text;
-
-  } catch (error) {
-    console.error("❌ GEMINI ERROR:", error);
-
-    throw error;
   }
+
+  throw new Error("Gemini generation failed.");
 }
 
 // ===============================
