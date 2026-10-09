@@ -454,6 +454,93 @@ ${error?.message || String(error)}`
   }
 });
 
+/ ==========================================
+// /CHARACTER
+// ==========================================
+
+bot.onText(/^\/character(?:@\w+)?(?:\s+([\s\S]+))?$/i, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const name = (match[1] || "").trim();
+
+  if (!name) {
+    await bot.sendMessage(
+      chatId,
+      "🎨 Character બનાવવા માટે નામ આપો.\n\nExample: /character Riya"
+    );
+    return;
+  }
+
+  try {
+    await bot.sendMessage(
+      chatId,
+      `🎨 ${name} character design થઈ રહ્યું છે...`
+    );
+
+    const prompt = `
+You are CartoonVerse AI V10 Character Design Engine.
+
+Create a detailed, original, reusable character sheet for a Hindi kids cartoon.
+
+CHARACTER NAME: ${name}
+
+Write the complete result in simple Hindi, with English image prompts.
+
+Include:
+1. Character name and role.
+2. Apparent age.
+3. Face and head shape.
+4. Hair style and exact hair color.
+5. Eye shape and color.
+6. Skin tone.
+7. Outfit with exact colors and details.
+8. Shoes and accessories.
+9. Height and body proportions in cartoon style.
+10. Personality and expressions.
+11. Signature pose and distinctive features.
+12. Fixed color palette.
+13. A detailed, family-friendly image-generation prompt.
+14. A negative prompt to avoid unwanted variations.
+15. Character consistency rules for future scenes.
+
+IMPORTANT:
+- Make the design original.
+- Choose specific visual details, not vague descriptions.
+- Keep the same face, hairstyle, eye color, outfit, shoes,
+  accessories, proportions and colors in every future scene.
+- The image prompt should show the full character clearly.
+- Do not claim an image has been generated; provide text prompts only.
+
+Return the finished character sheet directly.
+`;
+
+    const character = await generateAI(prompt);
+
+    await sendLongMessage(
+      chatId,
+      `🎨 CARTOONVERSE AI V10\n\nCHARACTER SHEET: ${name}\n\n${character}`
+    );
+
+  } catch (error) {
+    console.error(
+      "❌ CHARACTER ERROR:",
+      error?.message || error
+    );
+
+    try {
+      await bot.sendMessage(
+        chatId,
+        `❌ Character Error:\n${error?.message || String(error)}`
+      );
+    } catch (sendError) {
+      console.error(
+        "❌ CHARACTER ERROR MESSAGE FAILED:",
+        sendError?.message || sendError
+      );
+    }
+  }
+});
+
+
 // ==========================================
 // TELEGRAM ERRORS
 // ==========================================
